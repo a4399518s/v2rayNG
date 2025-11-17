@@ -321,24 +321,26 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             }
             var select = MmkvManager.getSelectServer();
             if (select == null){
-                this@MainActivity.setServer(info)
+                withContext(Dispatchers.Main) {
+                    this@MainActivity.setServer(info)
+                }
                 return@launch
             }
             var profileItem = MmkvManager.decodeServerConfig(select!!)!!
 
             if (!StrUtil.equals(profileItem.server,info.getString("proxy_ip")) || !StrUtil.equals(profileItem.serverPort,info.getString("proxy_port"))){
-                if(V2RayServiceManager.isRunning()){
                     withContext(Dispatchers.Main) {
-                        V2RayServiceManager.stopVService(this@MainActivity)
+                        if(mainViewModel.isRunning.value == true){
+                            V2RayServiceManager.stopVService(this@MainActivity)
+                        }
+                        MmkvManager.removeServer(select)
+                        this@MainActivity.setServer(info)
                     }
-                }
-                MmkvManager.removeServer(select)
-                this@MainActivity.setServer(info)
                 return@launch
             }else{
                 withContext(Dispatchers.Main) {
                     mainViewModel.reloadServerList()
-                    if(!V2RayServiceManager.isRunning()){
+                    if(mainViewModel.isRunning.value == false){
                         V2RayServiceManager.startVService(this@MainActivity)
                     }
                 }
@@ -368,10 +370,8 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         )
         var guid = MmkvManager.encodeServerConfig("",config)
         MmkvManager.setSelectServer(guid)
-        withContext(Dispatchers.Main) {
-            mainViewModel.reloadServerList()
-            V2RayServiceManager.startVService(this@MainActivity)
-        }
+        mainViewModel.reloadServerList()
+        V2RayServiceManager.startVService(this@MainActivity)
 
 //        var localServer = MmkvManager.
 //        decodeServerList().
