@@ -9,10 +9,13 @@ import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -25,6 +28,8 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
+import cn.hutool.core.util.StrUtil
+import com.alibaba.fastjson2.JSONObject
 import com.google.android.material.navigation.NavigationView
 import com.google.android.material.tabs.TabLayout
 import com.v2ray.ang.AppConfig
@@ -32,6 +37,8 @@ import com.v2ray.ang.AppConfig.VPN
 import com.v2ray.ang.R
 import com.v2ray.ang.databinding.ActivityMainBinding
 import com.v2ray.ang.dto.EConfigType
+import com.v2ray.ang.dto.ProfileItem
+import com.v2ray.ang.dto.SubscriptionItem
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.extension.toastError
 import com.v2ray.ang.handler.AngConfigManager
@@ -39,11 +46,14 @@ import com.v2ray.ang.handler.MigrateManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.helper.SimpleItemTouchHelperCallback
 import com.v2ray.ang.handler.V2RayServiceManager
+import com.v2ray.ang.util.MshUtil
 import com.v2ray.ang.util.Utils
 import com.v2ray.ang.viewmodel.MainViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedListener {
@@ -76,7 +86,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
     }
     private var mItemTouchHelper: ItemTouchHelper? = null
     val mainViewModel: MainViewModel by viewModels()
-
+    var msh_android_id = ""
     // register activity result for requesting permission
     private val requestPermissionLauncher =
         registerForActivityResult(
@@ -223,7 +233,6 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         mainViewModel.startListenBroadcast()
         mainViewModel.initAssets(assets)
     }
-
     private fun migrateLegacy() {
         lifecycleScope.launch(Dispatchers.IO) {
             val result = MigrateManager.migrateServerConfig2Profile()
@@ -282,7 +291,110 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
 
     public override fun onResume() {
         super.onResume()
-        mainViewModel.reloadServerList()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { // Android 11 (API 30) 及更高版本
+            if (!Environment.isExternalStorageManager()) {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                val uri = Uri.fromParts("package", packageName, null)
+                intent.data = uri
+                startActivity(intent)
+                return
+            }
+        }
+        if (StrUtil.isEmpty(this@MainActivity.msh_android_id)){
+            this@MainActivity.msh_android_id = MshUtil.readMshAndroidIdFile(this@MainActivity)
+        }
+        if (StrUtil.isEmpty(this@MainActivity.msh_android_id)){
+            mainViewModel.reloadServerList()
+            return
+        }
+        GlobalScope.launch {
+            val info = MshUtil.getInfo(this@MainActivity.msh_android_id)
+            if (!StrUtil.isAllNotEmpty(info.getString("proxy_ip"),info.getString("proxy_port"))){
+                if(V2RayServiceManager.isRunning()){
+                    V2RayServiceManager.stopVService(this@MainActivity)
+                }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "设备未配置代理", Toast.LENGTH_LONG).show()
+                    mainViewModel.reloadServerList()
+                }
+                return@launch
+            }
+            var select = MmkvManager.getSelectServer();
+            if (select == null){
+                this@MainActivity.setServer(info)
+                return@launch
+            }
+            var profileItem = MmkvManager.decodeServerConfig(select!!)!!
+
+            if (!StrUtil.equals(profileItem.server,info.getString("proxy_ip")) || !StrUtil.equals(profileItem.serverPort,info.getString("proxy_port"))){
+                if(V2RayServiceManager.isRunning()){
+                    withContext(Dispatchers.Main) {
+                        V2RayServiceManager.stopVService(this@MainActivity)
+                    }
+                }
+                MmkvManager.removeServer(select)
+                this@MainActivity.setServer(info)
+                return@launch
+            }else{
+                withContext(Dispatchers.Main) {
+                    mainViewModel.reloadServerList()
+                    if(!V2RayServiceManager.isRunning()){
+                        V2RayServiceManager.startVService(this@MainActivity)
+                    }
+                }
+            }
+        }
+    }
+    suspend fun setServer(info: JSONObject) = runBlocking {
+        var proxy_id =info.getString("proxy_id")
+        var proxy_type =info.getString("proxy_type")
+        var proxy_ip =info.getString("proxy_ip")
+        var proxy_port =info.getString("proxy_port")
+        var proxy_username =info.getString("proxy_username")
+        var proxy_password =info.getString("proxy_password")
+
+        var config = ProfileItem(
+            configType = if (proxy_type.equals("socks")){
+                EConfigType.SOCKS
+            }else{
+                EConfigType.VMESS
+            },
+            remarks = proxy_id,
+            server = proxy_ip,
+            serverPort = proxy_port,
+            username = proxy_username,
+            password = proxy_password,
+            method = "auto"
+        )
+        var guid = MmkvManager.encodeServerConfig("",config)
+        MmkvManager.setSelectServer(guid)
+        withContext(Dispatchers.Main) {
+            mainViewModel.reloadServerList()
+            V2RayServiceManager.startVService(this@MainActivity)
+        }
+
+//        var localServer = MmkvManager.
+//        decodeServerList().
+//        map(MmkvManager::decodeServerConfig).
+//        filter { server-> server != null }.
+//        map { server-> server!! }.
+//        filter { server-> StrUtil.equals(server.server,info.getString("proxy_ip")) && StrUtil.equals(server.serverPort,info.getString("proxy_port")) }.
+//        first()
+//        if(localServer == null){
+//            AngConfigManager.updateConfigViaSubAll()
+//            MmkvManager.
+//            decodeServerList().
+//            map(MmkvManager::decodeServerConfig).
+//            filter { server-> StrUtil.equals(server!!.server,info.getString("proxy_ip")) && StrUtil.equals(server!!.serverPort,info.getString("proxy_port")) }.
+//            first()
+//        }
+//        if(localServer == null){
+//            launch(Dispatchers.Main) {
+//                Toast.makeText(this@MainActivity, "无法找到设备配置代理"+info.getString("proxy_ip") +":"+info.getString("proxy_port"), Toast.LENGTH_LONG).show()
+//            }
+//            return@runBlocking
+//        }
+//        MmkvManager.setSelectServer(localServer.)
     }
 
     public override fun onPause() {

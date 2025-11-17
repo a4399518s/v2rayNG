@@ -13,7 +13,7 @@ android {
         minSdk = 21
         targetSdk = 35
         versionCode = 678
-        versionName = "1.10.27"
+        versionName = "msh_1.10.27"
         multiDexEnabled = true
 
         val abiFilterList = (properties["ABI_FILTERS"] as? String)?.split(';')
@@ -26,9 +26,9 @@ android {
                 } else {
                     include(
                         "arm64-v8a",
-                        "armeabi-v7a",
-                        "x86_64",
-                        "x86"
+//                        "armeabi-v7a",
+//                        "x86_64",
+//                        "x86"
                     )
                 }
                 isUniversalApk = abiFilterList.isNullOrEmpty()
@@ -48,18 +48,8 @@ android {
         }
     }
 
-    flavorDimensions.add("distribution")
-    productFlavors {
-        create("fdroid") {
-            dimension = "distribution"
-            applicationIdSuffix = ".fdroid"
-            buildConfigField("String", "DISTRIBUTION", "\"F-Droid\"")
-        }
-        create("playstore") {
-            dimension = "distribution"
-            buildConfigField("String", "DISTRIBUTION", "\"Play Store\"")
-        }
-    }
+    // 删除了 flavorDimensions 块
+    // 删除了 productFlavors 块
 
     sourceSets {
         getByName("main") {
@@ -79,46 +69,27 @@ android {
 
     applicationVariants.all {
         val variant = this
-        val isFdroid = variant.productFlavors.any { it.name == "fdroid" }
-        if (isFdroid) {
-            val versionCodes =
-                mapOf(
-                    "armeabi-v7a" to 2, "arm64-v8a" to 1, "x86" to 4, "x86_64" to 3, "universal" to 0
-                )
+        // 删除了与渠道版本相关的逻辑，只保留通用打包逻辑
+        val versionCodes =
+//                mapOf("armeabi-v7a" to 4, "arm64-v8a" to 4, "x86" to 4, "x86_64" to 4, "universal" to 4)
+            mapOf("arm64-v8a" to 4)
 
-            variant.outputs
-                .map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }
-                .forEach { output ->
-                    val abi = output.getFilter("ABI") ?: "universal"
-                    output.outputFileName = "v2rayNG_${variant.versionName}-fdroid_${abi}.apk"
-                    if (versionCodes.containsKey(abi)) {
-                        output.versionCodeOverride =
-                            (100 * variant.versionCode + versionCodes[abi]!!).plus(5000000)
-                    } else {
-                        return@forEach
-                    }
+        variant.outputs
+            .map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }
+            .forEach { output ->
+                val abi = if (output.getFilter("ABI") != null)
+                    output.getFilter("ABI")
+                else
+                    "universal"
+
+                output.outputFileName = "v2rayNG_${variant.versionName}_${abi}.apk"
+                if (versionCodes.containsKey(abi)) {
+                    output.versionCodeOverride =
+                        (1000000 * versionCodes[abi]!!).plus(variant.versionCode)
+                } else {
+                    return@forEach
                 }
-        } else {
-            val versionCodes =
-                mapOf("armeabi-v7a" to 4, "arm64-v8a" to 4, "x86" to 4, "x86_64" to 4, "universal" to 4)
-
-            variant.outputs
-                .map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }
-                .forEach { output ->
-                    val abi = if (output.getFilter("ABI") != null)
-                        output.getFilter("ABI")
-                    else
-                        "universal"
-
-                    output.outputFileName = "v2rayNG_${variant.versionName}_${abi}.apk"
-                    if (versionCodes.containsKey(abi)) {
-                        output.versionCodeOverride =
-                            (1000000 * versionCodes[abi]!!).plus(variant.versionCode)
-                    } else {
-                        return@forEach
-                    }
-                }
-        }
+            }
     }
 
     buildFeatures {
@@ -180,6 +151,9 @@ dependencies {
 
     // Multidex Support
     implementation(libs.multidex)
+
+    implementation("cn.hutool:hutool-all:5.8.16")
+    implementation("com.alibaba.fastjson2:fastjson2:2.0.60.android8")
 
     // Testing Libraries
     testImplementation(libs.junit)
