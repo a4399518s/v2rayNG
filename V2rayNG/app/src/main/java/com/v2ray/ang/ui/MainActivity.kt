@@ -309,6 +309,13 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
         }
         GlobalScope.launch {
             val info = MshUtil.getInfo(this@MainActivity.msh_android_id)
+            if(info == null){
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "设备不存在", Toast.LENGTH_LONG).show()
+                    mainViewModel.reloadServerList()
+                }
+                return@launch
+            }
             if (!StrUtil.isAllNotEmpty(info.getString("proxy_ip"),info.getString("proxy_port"))){
                 if(V2RayServiceManager.isRunning()){
                     V2RayServiceManager.stopVService(this@MainActivity)

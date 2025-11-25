@@ -37,9 +37,27 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("${System.getProperty("user.home")}/.ssh/fzh_2048.jks")
+            storePassword = System.getenv("FZH_2048_PASSWORD")
+            keyAlias = "fzh_2048"
+            keyPassword = System.getenv("FZH_2048_PASSWORD")
+        }
 
+        create("release") {
+            storeFile = file("${System.getProperty("user.home")}/.ssh/fzh_2048.jks")
+            storePassword = System.getenv("FZH_2048_PASSWORD")
+            keyAlias = "fzh_2048"
+            keyPassword = System.getenv("FZH_2048_PASSWORD")
+        }
+    }
     buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -38,13 +38,13 @@ object MshUtil {
      * 此方法在 Android 11 (API 30) 及更高版本上需要 MANAGE_EXTERNAL_STORAGE 权限。
      * 在 Android 10 (API 29) 及更早版本上，通常需要 READ_EXTERNAL_STORAGE 权限。
      */
-    public fun getInfo(msh_android_id:String) : JSONObject {
+    public fun getInfo(msh_android_id:String) : JSONObject? {
         var res = HttpRequest.post("https://automatic-android-api.jobeyond.cn/a/automation/mobile/info").
         timeout(3000).
         header("x-token","2W93grF60JDqnFEI").
         body(JSON.toJSONString(MapUtil.of("id",msh_android_id))).
         execute().body()
         var json = JSONObject.parseObject(res)
-        return json.getJSONObject("body")!!
+        return json.getJSONObject("body")
     }
 }
