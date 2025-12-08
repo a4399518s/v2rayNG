@@ -46,6 +46,7 @@ import com.v2ray.ang.handler.MigrateManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.helper.SimpleItemTouchHelperCallback
 import com.v2ray.ang.handler.V2RayServiceManager
+import com.v2ray.ang.util.MshConfigManager
 import com.v2ray.ang.util.MshUtil
 import com.v2ray.ang.util.Utils
 import com.v2ray.ang.viewmodel.MainViewModel
@@ -300,6 +301,7 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 return
             }
         }
+        MshConfigManager.checkAndUpdateVersion(this)
         if (StrUtil.isEmpty(this@MainActivity.msh_android_id)){
             this@MainActivity.msh_android_id = MshUtil.readMshAndroidIdFile(this@MainActivity)
         }
